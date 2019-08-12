@@ -30,6 +30,7 @@ KTF.set_session(session)
 class TimePerBatch(Callback):
     def on_train_begin(self, logs={}):
         self.start = time.time()
+        print("=========== :",self.start)
 
     def on_batch_end(self, batch, logs={}):
         self.time_elapse = time.time() - self.start
@@ -42,9 +43,12 @@ def parse_arguements(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('--annotation_path', type=str, help='', default='train.txt')
     parser.add_argument('--output_dir', type=str, help='', default='logs/000/')
-    parser.add_argument('--classes_path',type=str,help='',default='/model_data/coco_classes.txt')
-    parser.add_argument('--anchors_path', type=str, help='', default='/model_data/yolo_anchors.txt')
+    parser.add_argument('--classes_path',type=str,help='',default='model_data/coco_classes.txt')
+    parser.add_argument('--anchors_path', type=str, help='', default='model_data/yolo_anchors.txt')
     parser.add_argument('--gpus', type=int, help='', default=1)
+    parser.add_argument('--batch_size_freeze', type=int, help='', default=32)
+    parser.add_argument('--batch_size_unfreeze', type=int, help='', default=8)
+    parser.add_argument('--model_path', type=str, help='', default='model_data/yolo_weights.h5')
     return parser.parse_args(argv)
 
 
@@ -63,11 +67,11 @@ def _main(args):
     is_tiny_version = len(anchors)==6 # default setting
     if is_tiny_version:
         model = create_tiny_model(input_shape, anchors, num_classes,
-            freeze_body=2, weights_path='model_data/tiny_yolo_weights.h5',gpu_num=gpus)
+            freeze_body=2, weights_path=args.model_path,gpu_num=gpus)
 
     else:
         model = create_model(input_shape, anchors, num_classes,
-            freeze_body=2, weights_path='model_data/yolo_weights.h5',gpu_num=gpus) # make sure you know what you freeze
+            freeze_body=2, weights_path=args.model_path,gpu_num=gpus) # make sure you know what you freeze
 
 
     logging = TensorBoard(log_dir=log_dir)
@@ -95,9 +99,8 @@ def _main(args):
             # use custom yolo_loss Lambda layer.
             'yolo_loss': lambda y_true, y_pred: y_pred})
 
-        batch_size = 32
+        batch_size = args.batch_size_freeze
         print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, batch_size))
-        start_time=time.time()
         model.fit_generator(data_generator_wrapper(lines[:num_train], batch_size, input_shape, anchors, num_classes),
                 steps_per_epoch=max(1, num_train//batch_size),
                 validation_data=data_generator_wrapper(lines[num_train:], batch_size, input_shape, anchors, num_classes),
@@ -105,8 +108,6 @@ def _main(args):
                 epochs=1,
                 initial_epoch=0,
                 callbacks=[logging, checkpoint, time_log])
-        end_time = time.time()
-        print("total images/sec: %.2f"%(batch_size*max(1, num_train//batch_size)/(end_time-start_time)))
         model.save_weights(log_dir + 'trained_weights_stage_1.h5')
 
     # Unfreeze and continue training, to fine-tune.
@@ -117,7 +118,7 @@ def _main(args):
         model.compile(optimizer=Adam(lr=1e-4), loss={'yolo_loss': lambda y_true, y_pred: y_pred}) # recompile to apply the change
         print('Unfreeze all of the layers.')
 
-        batch_size = 8 # note that more GPU memory is required after unfreezing the body
+        batch_size = args.batch_size_unfreeze # note that more GPU memory is required after unfreezing the body
         print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, batch_size))
         start_time = time.time()
         model.fit_generator(data_generator_wrapper(lines[:num_train], batch_size, input_shape, anchors, num_classes),
@@ -243,5 +244,5 @@ def data_generator_wrapper(annotation_lines, batch_size, input_shape, anchors, n
     if n==0 or batch_size<=0: return None
     return data_generator(annotation_lines, batch_size, input_shape, anchors, num_classes)
 
-# if __name__ == '__main__':
-#     _main(parse_arguements(sys.argv[1:]))
+if __name__ == '__main__':
+    _main(parse_arguements(sys.argv[1:]))
