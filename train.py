@@ -44,6 +44,7 @@ def parse_arguements(argv):
     parser.add_argument('--output_dir', type=str, help='', default='logs/000/')
     parser.add_argument('--classes_path',type=str,help='',default='/model_data/coco_classes.txt')
     parser.add_argument('--anchors_path', type=str, help='', default='/model_data/yolo_anchors.txt')
+    parser.add_argument('--gpus', type=int, help='', default=1)
     return parser.parse_args(argv)
 
 
@@ -55,7 +56,7 @@ def _main(args):
     class_names = get_classes(classes_path)
     num_classes = len(class_names)
     anchors = get_anchors(anchors_path)
-    gpus=1
+    gpus=args.gpus
 
     input_shape = (416,416) # multiple of 32, hw
 
