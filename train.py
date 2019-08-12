@@ -30,7 +30,6 @@ KTF.set_session(session)
 class TimePerBatch(Callback):
     def on_train_begin(self, logs={}):
         self.start = time.time()
-        print("=========== :",self.start)
 
     def on_batch_end(self, batch, logs={}):
         self.time_elapse = time.time() - self.start
